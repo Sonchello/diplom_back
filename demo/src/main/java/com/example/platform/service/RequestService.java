@@ -1,6 +1,7 @@
 package com.example.platform.service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -14,6 +15,8 @@ import com.example.platform.model.User;
 import com.example.platform.repository.HelpHistoryRepository;
 import com.example.platform.repository.RequestRepository;
 import com.example.platform.repository.UserRepository;
+import com.example.platform.model.Notification;
+import com.example.platform.repository.NotificationRepository;
 
 @Service
 public class RequestService {
@@ -28,6 +31,9 @@ public class RequestService {
 
     @Autowired
     private NotificationService notificationService;
+
+    @Autowired
+    private NotificationRepository notificationRepository;
 
     @Transactional
     public Request createRequest(Long userId, Request request) {
@@ -132,15 +138,39 @@ public class RequestService {
         helpHistory.setHelper(helper);
         helpHistory.setStatus("IN_PROGRESS");
         helpHistory.setStartDate(LocalDateTime.now());
+
+        // Сохраняем запись в истории
         helpHistoryRepository.save(helpHistory);
 
+        // Обновляем статус запроса и устанавливаем активного помощника
+        request.setStatus("IN_PROGRESS");
+        request.setActiveHelper(helper);
+        request.setHelpStartDate(LocalDateTime.now());
+
         // Добавляем помощника в список помощников запроса
+        if (request.getHelpers() == null) {
+            request.setHelpers(new ArrayList<>());
+        }
         if (!request.getHelpers().contains(helper)) {
             request.getHelpers().add(helper);
         }
 
         // Сохраняем обновленный запрос
         requestRepository.save(request);
+
+        // Создаем уведомление для владельца запроса
+        Notification notification = new Notification();
+        notification.setUser(request.getUser());
+        notification.setRequest(request);
+        notification.setFromUser(helper);
+        notification.setMessage("Пользователь " + helper.getName() + " откликнулся на ваш запрос о помощи");
+        notification.setType("HELP_STARTED");
+        notification.setStatus("UNREAD");
+        notification.setCreatedAt(LocalDateTime.now());
+        notification.setActionNeeded(true);
+        notification.setRead(false);
+
+        notificationRepository.save(notification);
     }
 
     public List<Request> getUserRequests(Long userId) {

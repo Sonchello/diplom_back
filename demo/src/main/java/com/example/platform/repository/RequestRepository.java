@@ -1,10 +1,12 @@
 package com.example.platform.repository;
 
 import java.util.List;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+
 import com.example.platform.model.Request;
 
 @Repository
@@ -31,7 +33,8 @@ public interface RequestRepository extends JpaRepository<Request, Long> {
 
     @Query("SELECT DISTINCT r FROM Request r " +
             "JOIN HelpHistory h ON r.id = h.request.id " +
-            "WHERE h.helper.id = :userId AND h.status = 'IN_PROGRESS'")
+            "WHERE h.helper.id = :userId AND h.status = 'IN_PROGRESS' " +
+            "ORDER BY h.startDate DESC")
     List<Request> findActiveHelpRequests(@Param("userId") Long userId);
 
     @Query("SELECT r FROM Request r WHERE r.activeHelper.id = :userId AND r.status = :status")
