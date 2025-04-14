@@ -1,5 +1,6 @@
 package com.example.platform.controller;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -39,14 +40,26 @@ public class RequestController {
             String category = (String) payload.get("category");
             Double latitude = Double.parseDouble(payload.get("latitude").toString());
             Double longitude = Double.parseDouble(payload.get("longitude").toString());
-            String urgency = (String) payload.get("urgency");
+
+            // Получаем deadline_date из payload
+            String deadlineDateStr = (String) payload.get("deadline_date");
+            if (deadlineDateStr == null) {
+                return ResponseEntity.badRequest().body("Deadline date is required");
+            }
+
+            LocalDateTime deadlineDate;
+            try {
+                deadlineDate = LocalDateTime.parse(deadlineDateStr);
+            } catch (Exception e) {
+                return ResponseEntity.badRequest().body("Invalid deadline date format");
+            }
 
             Request request = new Request();
             request.setDescription(description);
             request.setCategory(category);
             request.setLatitude(latitude);
             request.setLongitude(longitude);
-            request.setUrgency(urgency);
+            request.setDeadlineDate(deadlineDate);
 
             Request createdRequest = requestService.createRequest(userId, request);
             return ResponseEntity.ok(createdRequest);
@@ -151,14 +164,13 @@ public class RequestController {
     @GetMapping("/filter")
     public ResponseEntity<?> filterRequests(
             @RequestParam(required = false) String category,
-            @RequestParam(required = false) String urgency,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Double maxDistance,
             @RequestParam(required = false) Double userLat,
             @RequestParam(required = false) Double userLon) {
         try {
             List<Request> requests = requestService.filterRequests(
-                    category, urgency, status, maxDistance, userLat, userLon);
+                    category, status, maxDistance, userLat, userLon);
             return ResponseEntity.ok(requests);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());

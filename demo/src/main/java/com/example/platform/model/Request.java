@@ -1,11 +1,29 @@
 package com.example.platform.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToMany;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
+import lombok.Data;
+
+@Data
 @Entity
 @Table(name = "requests")
 public class Request {
@@ -17,10 +35,10 @@ public class Request {
     private String description;
 
     @Column(nullable = false)
-    private Double latitude;
+    private double latitude;
 
     @Column(nullable = false)
-    private Double longitude;
+    private double longitude;
 
     @Column(nullable = false)
     private String status;
@@ -28,8 +46,22 @@ public class Request {
     @Column(nullable = false)
     private String category;
 
-    @Column(nullable = false)
-    private String urgency = "medium";
+    @Column(name = "deadline_date", nullable = false)
+    private LocalDateTime deadlineDate;
+
+    @Column(name = "is_expired")
+    private Boolean isExpired;
+
+    @PrePersist
+    @PreUpdate
+    private void validateDeadlineDate() {
+        if (deadlineDate == null) {
+            throw new IllegalArgumentException("Deadline date is required");
+        }
+        if (deadlineDate.isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("Deadline date cannot be in the past");
+        }
+    }
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
@@ -53,7 +85,7 @@ public class Request {
     private boolean isArchived = false;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "helper_id")
+    @JoinColumn(name = "active_helper_id")
     @JsonIgnoreProperties({"createdRequests", "helpedRequests", "password"})
     private User activeHelper;
 
@@ -78,19 +110,19 @@ public class Request {
         this.description = description;
     }
 
-    public Double getLatitude() {
+    public double getLatitude() {
         return latitude;
     }
 
-    public void setLatitude(Double latitude) {
+    public void setLatitude(double latitude) {
         this.latitude = latitude;
     }
 
-    public Double getLongitude() {
+    public double getLongitude() {
         return longitude;
     }
 
-    public void setLongitude(Double longitude) {
+    public void setLongitude(double longitude) {
         this.longitude = longitude;
     }
 
@@ -110,12 +142,20 @@ public class Request {
         this.category = category;
     }
 
-    public String getUrgency() {
-        return urgency;
+    public LocalDateTime getDeadlineDate() {
+        return deadlineDate;
     }
 
-    public void setUrgency(String urgency) {
-        this.urgency = urgency;
+    public void setDeadlineDate(LocalDateTime deadlineDate) {
+        this.deadlineDate = deadlineDate;
+    }
+
+    public Boolean getIsExpired() {
+        return isExpired;
+    }
+
+    public void setIsExpired(Boolean isExpired) {
+        this.isExpired = isExpired;
     }
 
     public User getUser() {

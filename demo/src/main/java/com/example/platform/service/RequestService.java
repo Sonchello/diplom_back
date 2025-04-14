@@ -6,17 +6,18 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.example.platform.model.HelpHistory;
+import com.example.platform.model.Notification;
 import com.example.platform.model.Request;
 import com.example.platform.model.User;
 import com.example.platform.repository.HelpHistoryRepository;
+import com.example.platform.repository.NotificationRepository;
 import com.example.platform.repository.RequestRepository;
 import com.example.platform.repository.UserRepository;
-import com.example.platform.model.Notification;
-import com.example.platform.repository.NotificationRepository;
 
 @Service
 public class RequestService {
@@ -51,6 +52,11 @@ public class RequestService {
                     });
 
             System.out.println("Found user: " + user.getId() + ", " + user.getEmail());
+
+            // Проверяем, что deadlineDate не в прошлом
+            if (request.getDeadlineDate().isBefore(LocalDateTime.now())) {
+                throw new IllegalArgumentException("Deadline date cannot be in the past");
+            }
 
             request.setUser(user);
             request.setCreationDate(LocalDateTime.now());
@@ -267,7 +273,7 @@ public class RequestService {
         return requestRepository.findCompletedHelpRequests(userId);
     }
 
-    public List<Request> filterRequests(String category, String urgency, String status, Double maxDistance,
+    public List<Request> filterRequests(String category, String status, Double maxDistance,
                                         Double userLat, Double userLon) {
         List<Request> requests = requestRepository.findAll();
 
@@ -277,10 +283,6 @@ public class RequestService {
 
                     if (category != null && !category.equals("all")) {
                         matches = matches && request.getCategory().equals(category);
-                    }
-
-                    if (urgency != null && !urgency.equals("all")) {
-                        matches = matches && request.getUrgency().equals(urgency);
                     }
 
                     if (status != null) {
@@ -346,5 +348,33 @@ public class RequestService {
         request.setActiveHelper(null);
         request.setStatus("ACTIVE");
         return requestRepository.save(request);
+    }
+
+    @Scheduled(fixedRate = 300000) // Проверка каждые 5 минут
+    @Transactional
+    public void checkAndCleanupExpiredRequests() {
+        LocalDateTime now = LocalDateTime.now();
+        List<Request> expiredRequests = requestRepository.findExpiredActiveRequests(now);
+
+        for (Request request : expiredRequests) {
+            request.setIsExpired(true);
+            request.setStatus("CANCELLED");
+            request.setArchived(true);
+
+            // Создаем уведомление для владельца запроса
+            Notification notification = new Notification();
+            notification.setUser(request.getUser());
+            notification.setRequest(request);
+            notification.setMessage("Ваш запрос '" + request.getDescription() + "' был автоматически отменен из-за истечения срока");
+            notification.setType("REQUEST_EXPIRED");
+            notification.setStatus("UNREAD");
+            notification.setCreatedAt(LocalDateTime.now());
+            notification.setActionNeeded(false);
+            notification.setRead(false);
+
+            notificationRepository.save(notification);
+        }
+
+        requestRepository.saveAll(expiredRequests);
     }
 }

@@ -1,5 +1,6 @@
 package com.example.platform.repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -18,9 +19,6 @@ public interface RequestRepository extends JpaRepository<Request, Long> {
 
     @Query("SELECT r FROM Request r WHERE r.category = :category")
     List<Request> findByCategory(@Param("category") String category);
-
-    @Query("SELECT r FROM Request r WHERE r.urgency = :urgency")
-    List<Request> findByUrgency(@Param("urgency") String urgency);
 
     @Query("SELECT r FROM Request r WHERE r.status = :status AND r.category = :category")
     List<Request> findByStatusAndCategory(@Param("status") String status, @Param("category") String category);
@@ -61,4 +59,7 @@ public interface RequestRepository extends JpaRepository<Request, Long> {
 
     @Query("SELECT r FROM Request r WHERE r.activeHelper.id = :userId AND r.status = 'COMPLETED'")
     List<Request> findCompletedHelpRequests(@Param("userId") Long userId);
+
+    @Query("SELECT r FROM Request r WHERE r.deadlineDate < :now AND r.status = 'ACTIVE' AND r.isExpired = false")
+    List<Request> findExpiredActiveRequests(@Param("now") LocalDateTime now);
 }
