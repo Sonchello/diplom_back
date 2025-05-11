@@ -45,8 +45,6 @@ public class Notification {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
-    @Column(nullable = false)
-    private boolean isRead;
 
     @Column(name = "action_needed")
     private boolean actionNeeded;
@@ -120,15 +118,6 @@ public class Notification {
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }
-
-    public boolean isRead() {
-        return isRead;
-    }
-
-    public void setRead(boolean read) {
-        isRead = read;
-    }
-
     public boolean isActionNeeded() {
         return actionNeeded;
     }

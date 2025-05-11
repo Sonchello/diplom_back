@@ -174,7 +174,7 @@ public class RequestService {
         notification.setStatus("UNREAD");
         notification.setCreatedAt(LocalDateTime.now());
         notification.setActionNeeded(true);
-        notification.setRead(false);
+
 
         notificationRepository.save(notification);
     }
@@ -370,7 +370,7 @@ public class RequestService {
             notification.setStatus("UNREAD");
             notification.setCreatedAt(LocalDateTime.now());
             notification.setActionNeeded(false);
-            notification.setRead(false);
+
 
             notificationRepository.save(notification);
         }

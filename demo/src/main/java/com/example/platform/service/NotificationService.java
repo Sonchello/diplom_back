@@ -48,33 +48,15 @@ public class NotificationService {
         notification.setCreatedAt(LocalDateTime.now());
         notification.setActionUrl("/requests/" + requestId + "/confirm-help");
         notification.setActionNeeded(true);
-        notification.setRead(false);
+
 
         notificationRepository.save(notification);
     }
 
-    public void markAsRead(Long notificationId) {
-        Notification notification = notificationRepository.findById(notificationId)
-                .orElseThrow(() -> new RuntimeException("Notification not found"));
-        notification.setRead(true);
-        notificationRepository.save(notification);
-    }
 
-    public void markAllAsRead(Long userId) {
-        List<Notification> unreadNotifications = notificationRepository.findByUserIdAndIsReadFalse(userId);
-        unreadNotifications.forEach(notification -> notification.setRead(true));
-        notificationRepository.saveAll(unreadNotifications);
-    }
 
     public List<Notification> getUserNotifications(Long userId) {
         return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId);
     }
 
-    public List<Notification> getUnreadNotifications(Long userId) {
-        return notificationRepository.findByUserIdAndIsReadFalse(userId);
-    }
-
-    public Long getUnreadCount(Long userId) {
-        return notificationRepository.countByUserIdAndIsReadFalse(userId);
-    }
 }

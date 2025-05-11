@@ -26,25 +26,6 @@ public class NotificationController {
         return ResponseEntity.ok(notificationService.getUserNotifications(userId));
     }
 
-    @GetMapping("/user/{userId}/unread")
-    public ResponseEntity<List<Notification>> getUnreadNotifications(@PathVariable Long userId) {
-        return ResponseEntity.ok(notificationService.getUnreadNotifications(userId));
-    }
 
-    @GetMapping("/user/{userId}/unread/count")
-    public ResponseEntity<Long> getUnreadCount(@PathVariable Long userId) {
-        return ResponseEntity.ok(notificationService.getUnreadCount(userId));
-    }
 
-    @PostMapping("/{notificationId}/read")
-    public ResponseEntity<?> markAsRead(@PathVariable Long notificationId) {
-        notificationService.markAsRead(notificationId);
-        return ResponseEntity.ok().build();
-    }
-
-    @PostMapping("/user/{userId}/read-all")
-    public ResponseEntity<?> markAllAsRead(@PathVariable Long userId) {
-        notificationService.markAllAsRead(userId);
-        return ResponseEntity.ok().build();
-    }
 }
