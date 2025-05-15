@@ -48,7 +48,7 @@ public class NotificationService {
         notification.setCreatedAt(LocalDateTime.now());
         notification.setActionUrl("/requests/" + requestId + "/confirm-help");
         notification.setActionNeeded(true);
-
+        notification.setFromUser(helper);
 
         notificationRepository.save(notification);
     }
@@ -59,4 +59,13 @@ public class NotificationService {
         return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId);
     }
 
+    public void deleteNotification(Long notificationId) {
+        notificationRepository.deleteById(notificationId);
+    }
+
+    @Transactional
+    public void deleteNotificationForRequestAndType(Long requestId, String type) {
+        System.out.println("Deleting notification for request: " + requestId + " and type: " + type);
+        notificationRepository.deleteByRequestIdAndType(requestId, type);
+    }
 }

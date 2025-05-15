@@ -163,20 +163,6 @@ public class RequestService {
 
         // Сохраняем обновленный запрос
         requestRepository.save(request);
-
-        // Создаем уведомление для владельца запроса
-        Notification notification = new Notification();
-        notification.setUser(request.getUser());
-        notification.setRequest(request);
-        notification.setFromUser(helper);
-        notification.setMessage("Пользователь " + helper.getName() + " откликнулся на ваш запрос о помощи");
-        notification.setType("HELP_STARTED");
-        notification.setStatus("UNREAD");
-        notification.setCreatedAt(LocalDateTime.now());
-        notification.setActionNeeded(true);
-
-
-        notificationRepository.save(notification);
     }
 
     public List<Request> getUserRequests(Long userId) {
@@ -321,22 +307,34 @@ public class RequestService {
 
     @Transactional
     public Request confirmHelpCompletion(Long requestId, Long userId) {
+        System.out.println("Confirming help completion for request: " + requestId + ", userId: " + userId);
+
         Request request = requestRepository.findById(requestId)
-                .orElseThrow(() -> new RuntimeException("Request not found"));
+                .orElseThrow(() -> {
+                    System.out.println("Request not found: " + requestId);
+                    return new RuntimeException("Request not found");
+                });
 
         if (!request.getUser().getId().equals(userId)) {
+            System.out.println("User " + userId + " is not the creator of request " + requestId);
             throw new RuntimeException("Only the request creator can confirm help completion");
         }
 
         // Находим активную запись в help_history
-        HelpHistory helpHistory = helpHistoryRepository.findByRequestIdAndStatus(requestId, "PENDING_CONFIRMATION")
-                .stream()
+        List<HelpHistory> pendingHelps = helpHistoryRepository.findByRequestIdAndStatus(requestId, "PENDING_CONFIRMATION");
+        System.out.println("Found " + pendingHelps.size() + " pending help records");
+
+        HelpHistory helpHistory = pendingHelps.stream()
                 .findFirst()
-                .orElseThrow(() -> new RuntimeException("No pending help confirmation found"));
+                .orElseThrow(() -> {
+                    System.out.println("No pending help confirmation found for request: " + requestId);
+                    return new RuntimeException("No pending help confirmation found");
+                });
 
         // Обновляем статус в help_history на COMPLETED
         helpHistory.setStatus("COMPLETED");
         helpHistoryRepository.save(helpHistory);
+        System.out.println("Updated help history status to COMPLETED");
 
         // Добавляем помощника в список helpers
         User helper = helpHistory.getHelper();
@@ -347,7 +345,10 @@ public class RequestService {
         // Сбрасываем активного помощника и возвращаем запрос в статус ACTIVE
         request.setActiveHelper(null);
         request.setStatus("ACTIVE");
-        return requestRepository.save(request);
+        Request savedRequest = requestRepository.save(request);
+        System.out.println("Updated request status to ACTIVE");
+
+        return savedRequest;
     }
 
     @Scheduled(fixedRate = 300000) // Проверка каждые 5 минут
@@ -376,5 +377,30 @@ public class RequestService {
         }
 
         requestRepository.saveAll(expiredRequests);
+    }
+
+    @Transactional
+    public void rejectHelpCompletion(Long requestId, Long userId) {
+        Request request = requestRepository.findById(requestId)
+                .orElseThrow(() -> new RuntimeException("Request not found"));
+
+        if (!request.getUser().getId().equals(userId)) {
+            throw new RuntimeException("Only the request creator can reject help completion");
+        }
+
+        // Находим активную запись в help_history
+        List<HelpHistory> pendingHelps = helpHistoryRepository.findByRequestIdAndStatus(requestId, "PENDING_CONFIRMATION");
+        HelpHistory helpHistory = pendingHelps.stream()
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("No pending help confirmation found"));
+
+        // Обновляем статус в help_history на CANCELLED
+        helpHistory.setStatus("CANCELLED");
+        helpHistoryRepository.save(helpHistory);
+
+        // Сбрасываем активного помощника и возвращаем запрос в статус ACTIVE
+        request.setActiveHelper(null);
+        request.setStatus("ACTIVE");
+        requestRepository.save(request);
     }
 }

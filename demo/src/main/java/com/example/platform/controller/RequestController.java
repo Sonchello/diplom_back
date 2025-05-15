@@ -232,4 +232,16 @@ public class RequestController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
+
+    @PostMapping("/{requestId}/reject-help")
+    public ResponseEntity<?> rejectHelpCompletion(
+            @PathVariable Long requestId,
+            @RequestParam Long userId) {
+        try {
+            requestService.rejectHelpCompletion(requestId, userId);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
 }
