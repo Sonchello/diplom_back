@@ -59,6 +59,15 @@ public class ReviewService {
         System.out.println("Saving review for request: " + requestId);
         Review savedReview = reviewRepository.save(review);
 
+        // Обновляем рейтинг помощника
+        List<Review> helperReviews = reviewRepository.findByHelperId(helperId);
+        double avgRating = helperReviews.stream()
+                .mapToInt(Review::getRating)
+                .average()
+                .orElse(0);
+        helper.setRating((int)Math.round(avgRating));
+        userRepository.save(helper);
+
         // Удаляем уведомление о необходимости оставить отзыв
         notificationService.deleteNotificationForRequestAndType(requestId, "REVIEW_REQUESTED");
 

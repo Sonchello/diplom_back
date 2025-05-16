@@ -34,7 +34,7 @@ public class NotificationService {
                 .orElseThrow(() -> new RuntimeException("Helper not found"));
 
         String message = String.format(
-                "Помощник %s сообщает, что оказал помощь по вашему запросу '%s'. Пожалуйста, подтвердите получение помощи.",
+                " %s сообщает, что оказал помощь по вашему запросу '%s'. Пожалуйста, подтвердите получение помощи.",
                 helper.getName(),
                 request.getDescription()
         );

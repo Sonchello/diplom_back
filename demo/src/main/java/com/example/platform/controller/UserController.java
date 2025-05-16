@@ -15,6 +15,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 
+import java.util.List;
 import java.util.Map;
 
 @CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
@@ -33,6 +34,12 @@ public class UserController {
             System.out.println("Getting current user for email: " + email);
             User user = userService.findByEmail(email);
             System.out.println("Found user: " + user.getId() + ", " + user.getEmail());
+
+            // Убеждаемся, что у пользователя есть имя
+            if (user.getName() == null || user.getName().trim().isEmpty()) {
+                user.setName("Пользователь");
+            }
+
             return ResponseEntity.ok(user);
         } catch (Exception e) {
             System.err.println("Error getting current user: " + e.getMessage());
@@ -92,5 +99,10 @@ public class UserController {
         int lastIndexOf = fileName.lastIndexOf(".");
         if (lastIndexOf == -1) return "";
         return fileName.substring(lastIndexOf);
+    }
+
+    @GetMapping("/rating")
+    public ResponseEntity<List<Map<String, Object>>> getUsersRating() {
+        return ResponseEntity.ok(userService.getUsersRating());
     }
 }

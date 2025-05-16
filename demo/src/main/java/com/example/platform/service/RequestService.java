@@ -18,6 +18,7 @@ import com.example.platform.repository.HelpHistoryRepository;
 import com.example.platform.repository.NotificationRepository;
 import com.example.platform.repository.RequestRepository;
 import com.example.platform.repository.UserRepository;
+import com.example.platform.repository.ReviewRepository;
 
 @Service
 public class RequestService {
@@ -35,6 +36,9 @@ public class RequestService {
 
     @Autowired
     private NotificationRepository notificationRepository;
+
+    @Autowired
+    private ReviewRepository reviewRepository;
 
     @Transactional
     public Request createRequest(Long userId, Request request) {
@@ -84,6 +88,29 @@ public class RequestService {
         List<Request> activeRequests = requestRepository.findByStatus("ACTIVE");
         List<Request> inProgressRequests = requestRepository.findByStatus("IN_PROGRESS");
         activeRequests.addAll(inProgressRequests);
+
+        // Добавляем рейтинг пользователя (создателя) в каждый Request
+        for (Request req : activeRequests) {
+            if (req.getUser() != null) {
+                // Вычисляем средний рейтинг из отзывов
+                double avgRating = 0;
+                var reviews = reviewRepository.findByHelperId(req.getUser().getId());
+                if (reviews != null && !reviews.isEmpty()) {
+                    avgRating = reviews.stream()
+                            .mapToInt(r -> r.getRating())
+                            .average()
+                            .orElse(0);
+                }
+
+                // Устанавливаем рейтинг пользователя
+                req.getUser().setRating((int)Math.round(avgRating));
+
+                // Убеждаемся, что имя пользователя установлено
+                if (req.getUser().getName() == null || req.getUser().getName().trim().isEmpty()) {
+                    req.getUser().setName("Пользователь");
+                }
+            }
+        }
         return activeRequests;
     }
 
@@ -132,11 +159,6 @@ public class RequestService {
             throw new RuntimeException("Вы не можете откликнуться на свой собственный запрос");
         }
 
-        // Проверяем, не откликнулся ли уже пользователь на этот запрос
-        boolean alreadyResponded = helpHistoryRepository.existsByRequestIdAndHelperId(requestId, userId);
-        if (alreadyResponded) {
-            throw new RuntimeException("Вы уже откликнулись на этот запрос");
-        }
 
         // Создаем новую запись в истории помощи
         HelpHistory helpHistory = new HelpHistory();
