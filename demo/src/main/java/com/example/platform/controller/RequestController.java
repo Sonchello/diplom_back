@@ -3,6 +3,8 @@ package com.example.platform.controller;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.ArrayList;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -33,13 +35,26 @@ public class RequestController {
         try {
             System.out.println("Received payload: " + payload);
 
-            Long userId = Long.parseLong(payload.get("userId").toString());
-            System.out.println("Parsed userId: " + userId);
+            Long userId = null; // Инициализация с null
+            if (payload.containsKey("userId")) {
+                userId = Long.parseLong(payload.get("userId").toString());
+                System.out.println("Parsed userId: " + userId);
+            } else {
+                return ResponseEntity.badRequest().body("UserId is required");
+            }
 
             String description = (String) payload.get("description");
             String category = (String) payload.get("category");
-            Double latitude = Double.parseDouble(payload.get("latitude").toString());
-            Double longitude = Double.parseDouble(payload.get("longitude").toString());
+            Double latitude = null; // Инициализация с null
+            Double longitude = null; // Инициализация с null
+
+            if (payload.containsKey("latitude")) {
+                latitude = Double.parseDouble(payload.get("latitude").toString());
+            }
+
+            if (payload.containsKey("longitude")) {
+                longitude = Double.parseDouble(payload.get("longitude").toString());
+            }
 
             // Получаем deadline_date из payload
             String deadlineDateStr = (String) payload.get("deadline_date");
@@ -167,13 +182,90 @@ public class RequestController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Double maxDistance,
             @RequestParam(required = false) Double userLat,
-            @RequestParam(required = false) Double userLon) {
+            @RequestParam(required = false) Double userLon,
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) String tab) {
         try {
+            // Валидация параметров
+            if (maxDistance != null && maxDistance < 0) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "message", "Максимальное расстояние не может быть отрицательным"
+                ));
+            }
+
+            if (userLat != null && (userLat < -90 || userLat > 90)) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "message", "Некорректная широта"
+                ));
+            }
+
+            if (userLon != null && (userLon < -180 || userLon > 180)) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "message", "Некорректная долгота"
+                ));
+            }
+
+            // Если указаны координаты, но не указано максимальное расстояние,
+            // устанавливаем значение по умолчанию (1000 метров)
+            if (userLat != null && userLon != null && maxDistance == null) {
+                maxDistance = 1000.0;
+            }
+
+            // Если указано максимальное расстояние, но не указаны координаты,
+            // игнорируем параметр maxDistance
+            if (maxDistance != null && (userLat == null || userLon == null)) {
+                maxDistance = null;
+            }
+
+            List<String> targetStatuses = null; // Изначально статусы не фильтруем
+
+            if ("active".equals(tab)) {
+                targetStatuses = new ArrayList<>();
+                targetStatuses.add("ACTIVE");
+                targetStatuses.add("IN_PROGRESS");
+            } else if (status != null) {
+                targetStatuses = new ArrayList<>();
+                targetStatuses.add(status);
+            }
+
             List<Request> requests = requestService.filterRequests(
-                    category, status, maxDistance, userLat, userLon);
-            return ResponseEntity.ok(requests);
+                    category, targetStatuses, maxDistance, userLat, userLon);
+
+            // Дополнительная фильтрация на основе вкладки
+            if (tab != null && userId != null) {
+                switch (tab) {
+                    case "my":
+                        // Для вкладки "Мои запросы" фильтруем только по пользователю, статус любой
+                        requests = requestService.getUserRequests(userId);
+                        break;
+                    case "responses":
+                        requests = requests.stream()
+                                .filter(request -> request.getHelpHistory() != null &&
+                                        request.getHelpHistory().stream()
+                                                .anyMatch(h -> h.getStatus().equals("IN_PROGRESS") &&
+                                                        h.getHelper() != null &&
+                                                        h.getHelper().getId().equals(userId)))
+                                .collect(Collectors.toList());
+                        break;
+                }
+            } else if (userId != null) {
+                // Если tab не указан, но указан userId, предполагаем, что нужны все запросы пользователя
+                requests = requestService.getUserRequests(userId);
+            }
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "data", requests,
+                    "total", requests.size()
+            ));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "Ошибка при фильтрации запросов: " + e.getMessage()
+            ));
         }
     }
 

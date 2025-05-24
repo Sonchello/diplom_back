@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.Arrays;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -17,8 +18,8 @@ import com.example.platform.model.User;
 import com.example.platform.repository.HelpHistoryRepository;
 import com.example.platform.repository.NotificationRepository;
 import com.example.platform.repository.RequestRepository;
-import com.example.platform.repository.UserRepository;
 import com.example.platform.repository.ReviewRepository;
+import com.example.platform.repository.UserRepository;
 
 @Service
 public class RequestService {
@@ -281,7 +282,7 @@ public class RequestService {
         return requestRepository.findCompletedHelpRequests(userId);
     }
 
-    public List<Request> filterRequests(String category, String status, Double maxDistance,
+    public List<Request> filterRequests(String category, List<String> statuses, Double maxDistance,
                                         Double userLat, Double userLon) {
         List<Request> requests = requestRepository.findAll();
 
@@ -293,14 +294,14 @@ public class RequestService {
                         matches = matches && request.getCategory().equals(category);
                     }
 
-                    if (status != null) {
-                        matches = matches && request.getStatus().equals(status);
+                    if (statuses != null && !statuses.isEmpty()) {
+                        matches = matches && statuses.contains(request.getStatus());
                     }
 
                     if (maxDistance != null && userLat != null && userLon != null) {
                         double distance = calculateDistance(userLat, userLon,
                                 request.getLatitude(), request.getLongitude());
-                        matches = matches && distance <= maxDistance;
+                        matches = matches && distance <= maxDistance; // Расстояние в метрах
                     }
 
                     return matches;
@@ -309,7 +310,7 @@ public class RequestService {
     }
 
     private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-        final int R = 6371;
+        final int R = 6371; // Радиус Земли в километрах
 
         double latDistance = Math.toRadians(lat2 - lat1);
         double lonDistance = Math.toRadians(lon2 - lon1);
@@ -320,7 +321,7 @@ public class RequestService {
 
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-        return R * c;
+        return R * c * 1000; // Конвертируем в метры
     }
 
     public Request getRequestById(Long requestId) {
