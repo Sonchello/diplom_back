@@ -13,10 +13,13 @@ import jakarta.annotation.PostConstruct;
 
 @SpringBootApplication
 @EnableScheduling
-public class PlatformApplication {
+public class
+PlatformApplication {
 
 	@Value("${file.upload-dir}")
 	private String uploadDir;
+
+
 
 	@PostConstruct
 	public void init() {

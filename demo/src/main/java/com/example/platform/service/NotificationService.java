@@ -53,7 +53,36 @@ public class NotificationService {
         notificationRepository.save(notification);
     }
 
+    // Общий метод для создания уведомлений
+    public void createNotification(Long userId, Long requestId, String message, String type, boolean actionNeeded, String actionUrl, Long fromUserId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
+        Request request = null;
+        if (requestId != null) {
+            request = requestRepository.findById(requestId)
+                    .orElseThrow(() -> new RuntimeException("Request not found"));
+        }
+
+        User fromUser = null;
+        if (fromUserId != null) {
+            fromUser = userRepository.findById(fromUserId)
+                    .orElseThrow(() -> new RuntimeException("From User not found"));
+        }
+
+        Notification notification = new Notification();
+        notification.setUser(user);
+        notification.setRequest(request);
+        notification.setMessage(message);
+        notification.setType(type);
+        notification.setStatus("UNREAD"); // Новые уведомления всегда UNREAD
+        notification.setCreatedAt(LocalDateTime.now());
+        notification.setActionNeeded(actionNeeded);
+        notification.setActionUrl(actionUrl);
+        notification.setFromUser(fromUser);
+
+        notificationRepository.save(notification);
+    }
 
     public List<Notification> getUserNotifications(Long userId) {
         return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId);

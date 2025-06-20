@@ -68,8 +68,33 @@ public class ReviewService {
         helper.setRating((int)Math.round(avgRating));
         userRepository.save(helper);
 
-        // Удаляем уведомление о необходимости оставить отзыв
-        notificationService.deleteNotificationForRequestAndType(requestId, "REVIEW_REQUESTED");
+        // Удаляем уведомление о завершении помощи у создателя запроса после оставления отзыва
+        try {
+            // Удаляем уведомление типа HELP_COMPLETION для автора отзыва (создателя запроса) по данному запросу
+            notificationService.deleteNotificationForRequestAndType(requestId, "HELP_COMPLETION");
+        } catch (Exception e) {
+            System.err.println("Warning: Could not delete HELP_COMPLETION notification for request " + requestId + ": " + e.getMessage());
+            // Продолжаем выполнение, так как удаление уведомления не является критичным для сохранения отзыва
+        }
+
+        // Создаем уведомление для помощника о новом отзыве
+        String notificationMessage = String.format(
+                "Пользователь %s оставил отзыв о вашей помощи по запросу \"%s\". Рейтинг: %d/5.---REVIEW_TEXT---%s",
+                author.getName(),
+                request.getDescription(),
+                rating,
+                review.getText()
+        );
+
+        notificationService.createNotification(
+                helper.getId(), // Получатель: помощник
+                request.getId(), // Связанный запрос
+                notificationMessage, // Сообщение
+                "REVIEW_RECEIVED", // Тип уведомления
+                false, // Не требует немедленного действия
+                null, // actionUrl (не требуется для этого типа)
+                author.getId() // Отправитель: автор отзыва
+        );
 
         return savedReview;
     }

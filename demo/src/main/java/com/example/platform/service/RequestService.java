@@ -4,15 +4,12 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
-import java.util.Arrays;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.example.platform.model.HelpHistory;
-import com.example.platform.model.Notification;
 import com.example.platform.model.Request;
 import com.example.platform.model.User;
 import com.example.platform.repository.HelpHistoryRepository;
@@ -142,7 +139,7 @@ public class RequestService {
 
         request.setStatus(status);
         if ("COMPLETED".equals(status)) {
-            request.setCompletionDate(LocalDateTime.now());
+            // request.setCompletionDate(LocalDateTime.now()); // Удалено, так как поле удалено из Request
         }
         return requestRepository.save(request);
     }
@@ -160,6 +157,14 @@ public class RequestService {
             throw new RuntimeException("Вы не можете откликнуться на свой собственный запрос");
         }
 
+        // Проверяем, не откликнулся ли уже этот пользователь
+        List<HelpHistory> existingHelps = helpHistoryRepository.findByRequestIdAndHelperIdOrderByStartDateDesc(requestId, userId);
+        if (!existingHelps.isEmpty()) {
+            HelpHistory lastHelp = existingHelps.get(0);
+            if ("IN_PROGRESS".equals(lastHelp.getStatus()) || "PENDING_CONFIRMATION".equals(lastHelp.getStatus())) {
+                throw new RuntimeException("Вы уже откликнулись на этот запрос");
+            }
+        }
 
         // Создаем новую запись в истории помощи
         HelpHistory helpHistory = new HelpHistory();
@@ -171,20 +176,8 @@ public class RequestService {
         // Сохраняем запись в истории
         helpHistoryRepository.save(helpHistory);
 
-        // Обновляем статус запроса и устанавливаем активного помощника
+        // Обновляем статус запроса
         request.setStatus("IN_PROGRESS");
-        request.setActiveHelper(helper);
-        request.setHelpStartDate(LocalDateTime.now());
-
-        // Добавляем помощника в список помощников запроса
-        if (request.getHelpers() == null) {
-            request.setHelpers(new ArrayList<>());
-        }
-        if (!request.getHelpers().contains(helper)) {
-            request.getHelpers().add(helper);
-        }
-
-        // Сохраняем обновленный запрос
         requestRepository.save(request);
     }
 
@@ -205,7 +198,7 @@ public class RequestService {
     }
 
     @Transactional
-    public Request archiveRequest(Long requestId, Long userId) {
+    public void archiveRequest(Long requestId, Long userId) {
         Request request = requestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Request not found"));
 
@@ -213,65 +206,85 @@ public class RequestService {
             throw new RuntimeException("You can only archive your own requests");
         }
 
+        // Вместо физического удаления, устанавливаем флаг isArchived в true
         request.setArchived(true);
-        return requestRepository.save(request);
+        requestRepository.save(request);
+
+        // Удаление записей helpHistory теперь не нужно, т.к. связь ON DELETE CASCADE удалена в БД,
+        // а при архивации мы не удаляем сам запрос, поэтому история сохраняется.
+        // helpHistoryRepository.deleteAll(helpHistoryRepository.findByRequestId(requestId)); // Эта строка удалена
+
+        // Физическое удаление запроса теперь не выполняется
+        // requestRepository.delete(request); // Эта строка удалена
     }
 
     @Transactional
     public Request completeHelp(Long requestId, Long helperId) {
-        Request request = requestRepository.findById(requestId)
-                .orElseThrow(() -> new RuntimeException("Request not found"));
+        // Находим запись в help_history для этого запроса и этого помощника со статусом IN_PROGRESS
+        List<HelpHistory> activeHelps = helpHistoryRepository.findActiveHelpsByRequestAndHelper(requestId, helperId);
 
-        if (!request.getActiveHelper().getId().equals(helperId)) {
-            throw new RuntimeException("Only the active helper can complete this request");
+        if (activeHelps.isEmpty()) {
+            throw new RuntimeException("Активная запись истории помощи для этого запроса и помощника не найдена");
         }
 
-        // Обновляем запись в help_history
-        HelpHistory helpHistory = helpHistoryRepository.findActiveHelpsByUserId(helperId, "IN_PROGRESS")
-                .stream()
-                .filter(h -> h.getRequest().getId().equals(requestId))
-                .findFirst()
-                .orElseThrow(() -> new RuntimeException("Help history not found"));
+        // Предполагаем, что есть только одна активная запись IN_PROGRESS для данной пары запрос-помощник
+        HelpHistory helpHistory = activeHelps.get(0);
 
-        helpHistory.setStatus("PENDING_CONFIRMATION");
+        // Обновляем запись в help_history
+        helpHistory.setStatus("PENDING_CONFIRMATION"); // Или сразу "COMPLETED" в зависимости от флоу
         helpHistory.setEndDate(LocalDateTime.now());
         helpHistoryRepository.save(helpHistory);
 
         // Создаем уведомление для создателя запроса
         notificationService.createHelpCompletionNotification(requestId, helperId);
 
-        return request;
+        // Возвращаем обновленный запрос (статус запроса в таблице requests обновляется при подтверждении/отклонении)
+        Request request = requestRepository.findById(requestId)
+                .orElseThrow(() -> new RuntimeException("Request not found"));
+
+        return request; // Или requestRepository.save(request) если нужно сохранить изменения в запросе сразу
     }
 
     @Transactional
     public Request cancelHelp(Long requestId, Long helperId) {
-        Request request = requestRepository.findById(requestId)
-                .orElseThrow(() -> new RuntimeException("Request not found"));
+        // Находим запись в help_history для этого запроса и этого помощника со статусом IN_PROGRESS
+        List<HelpHistory> activeHelps = helpHistoryRepository.findActiveHelpsByRequestAndHelper(requestId, helperId);
 
-        if (!request.getActiveHelper().getId().equals(helperId)) {
-            throw new RuntimeException("Only the active helper can cancel help");
+        if (activeHelps.isEmpty()) {
+            throw new RuntimeException("Активная запись истории помощи для этого запроса и помощника не найдена");
         }
 
-        // Обновляем запись в help_history
-        HelpHistory helpHistory = helpHistoryRepository.findActiveHelpsByUserId(helperId, "IN_PROGRESS")
-                .stream()
-                .filter(h -> h.getRequest().getId().equals(requestId))
-                .findFirst()
-                .orElseThrow(() -> new RuntimeException("Help history not found"));
+        // Предполагаем, что есть только одна активная запись IN_PROGRESS для данной пары запрос-помощник
+        HelpHistory helpHistory = activeHelps.get(0);
 
+        // Обновляем запись в help_history
         helpHistory.setStatus("CANCELLED");
         helpHistory.setEndDate(LocalDateTime.now());
         helpHistoryRepository.save(helpHistory);
 
-        // Обновляем запрос
-        request.setStatus("ACTIVE");
-        request.setActiveHelper(null);
-        request.setHelpStartDate(null);
-        return requestRepository.save(request);
+        // Проверяем, остались ли еще активные помощники по этому запросу в help_history
+        List<HelpHistory> remainingActiveHelps = helpHistoryRepository.findByRequestIdAndStatus(requestId, "IN_PROGRESS");
+
+        // Если активных помощников не осталось, меняем статус запроса на ACTIVE
+        if (remainingActiveHelps.isEmpty()) {
+            Request request = requestRepository.findById(requestId)
+                    .orElseThrow(() -> new RuntimeException("Request not found"));
+            request.setStatus("ACTIVE");
+            requestRepository.save(request);
+        }
+
+        // Удаляем сброс activeHelper, helpStartDate
+        // request.setActiveHelper(null); // Удалено
+        // request.setHelpStartDate(null); // Удалено
+
+        // Возвращаем запрос (статус запроса мог измениться)
+        Request request = requestRepository.findById(requestId)
+                .orElseThrow(() -> new RuntimeException("Request not found"));
+        return request;
     }
 
     public List<Request> getActiveHelpRequests(Long userId) {
-        return requestRepository.findByActiveHelperIdAndStatus(userId, "IN_PROGRESS");
+        return requestRepository.findByHelperIdAndStatus(userId, "IN_PROGRESS");
     }
 
     public List<Request> getAllHelpedRequests(Long userId) {
@@ -284,44 +297,41 @@ public class RequestService {
 
     public List<Request> filterRequests(String category, List<String> statuses, Double maxDistance,
                                         Double userLat, Double userLon) {
-        List<Request> requests = requestRepository.findAll();
+        // Если указаны координаты и расстояние, используем пространственный запрос
+        if (maxDistance != null && userLat != null && userLon != null && maxDistance > 0) {
+            // Конвертируем расстояние из метров в градусы (примерно)
+            double distanceInDegrees = maxDistance / 111000.0; // 1 градус ≈ 111 км
+            List<Request> nearbyRequests = requestRepository.findNearbyRequests(userLat, userLon, distanceInDegrees);
 
+            // Дополнительная фильтрация по категории и статусу
+            return nearbyRequests.stream()
+                    .filter(request -> {
+                        boolean matches = true;
+                        if (category != null && !category.equals("all")) {
+                            matches = matches && request.getCategory().equals(category);
+                        }
+                        if (statuses != null && !statuses.isEmpty()) {
+                            matches = matches && statuses.contains(request.getStatus());
+                        }
+                        return matches;
+                    })
+                    .collect(Collectors.toList());
+        }
+
+        // Если координаты не указаны, используем обычную фильтрацию
+        List<Request> requests = requestRepository.findAll();
         return requests.stream()
                 .filter(request -> {
                     boolean matches = true;
-
                     if (category != null && !category.equals("all")) {
                         matches = matches && request.getCategory().equals(category);
                     }
-
                     if (statuses != null && !statuses.isEmpty()) {
                         matches = matches && statuses.contains(request.getStatus());
                     }
-
-                    if (maxDistance != null && userLat != null && userLon != null) {
-                        double distance = calculateDistance(userLat, userLon,
-                                request.getLatitude(), request.getLongitude());
-                        matches = matches && distance <= maxDistance; // Расстояние в метрах
-                    }
-
                     return matches;
                 })
                 .collect(Collectors.toList());
-    }
-
-    private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-        final int R = 6371; // Радиус Земли в километрах
-
-        double latDistance = Math.toRadians(lat2 - lat1);
-        double lonDistance = Math.toRadians(lon2 - lon1);
-
-        double a = Math.sin(latDistance / 2) * Math.sin(latDistance / 2)
-                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
-                * Math.sin(lonDistance / 2) * Math.sin(lonDistance / 2);
-
-        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-        return R * c * 1000; // Конвертируем в метры
     }
 
     public Request getRequestById(Long requestId) {
@@ -343,64 +353,80 @@ public class RequestService {
             throw new RuntimeException("Only the request creator can confirm help completion");
         }
 
-        // Находим активную запись в help_history
+        // Находим записи в help_history со статусом PENDING_CONFIRMATION для этого запроса
         List<HelpHistory> pendingHelps = helpHistoryRepository.findByRequestIdAndStatus(requestId, "PENDING_CONFIRMATION");
         System.out.println("Found " + pendingHelps.size() + " pending help records");
 
-        HelpHistory helpHistory = pendingHelps.stream()
-                .findFirst()
-                .orElseThrow(() -> {
-                    System.out.println("No pending help confirmation found for request: " + requestId);
-                    return new RuntimeException("No pending help confirmation found");
-                });
+        // Обрабатываем все записи в статусе PENDING_CONFIRMATION для данного запроса
+        for (HelpHistory helpHistory : pendingHelps) {
+            // Обновляем статус в help_history на COMPLETED
+            helpHistory.setStatus("COMPLETED");
+            // helpHistory.setEndDate(LocalDateTime.now()); // endDate уже установлен в completeHelp
+            helpHistoryRepository.save(helpHistory);
+            System.out.println("Updated help history status to COMPLETED for helpHistory id: " + helpHistory.getId());
 
-        // Обновляем статус в help_history на COMPLETED
-        helpHistory.setStatus("COMPLETED");
-        helpHistoryRepository.save(helpHistory);
-        System.out.println("Updated help history status to COMPLETED");
-
-        // Добавляем помощника в список helpers
-        User helper = helpHistory.getHelper();
-        if (!request.getHelpers().contains(helper)) {
-            request.getHelpers().add(helper);
+            // Добавляем помощника в список helpers запроса, если его там еще нет (на случай, если multiple helpers)
+            User helper = helpHistory.getHelper();
+            if (request.getHelpers() == null) {
+                request.setHelpers(new ArrayList<>());
+            }
+            if (!request.getHelpers().contains(helper)) {
+                request.getHelpers().add(helper);
+                System.out.println("Added helper " + helper.getId() + " to request helpers list");
+            }
         }
 
-        // Сбрасываем активного помощника и возвращаем запрос в статус ACTIVE
-        request.setActiveHelper(null);
-        request.setStatus("ACTIVE");
-        Request savedRequest = requestRepository.save(request);
-        System.out.println("Updated request status to ACTIVE");
+        // Проверяем, есть ли еще активные (IN_PROGRESS) или ожидающие подтверждения (PENDING_CONFIRMATION) записи в help_history для этого запроса
+        List<HelpHistory> remainingActiveOrPending = helpHistoryRepository.findByRequestIdAndStatus(requestId, "IN_PROGRESS");
+        remainingActiveOrPending.addAll(helpHistoryRepository.findByRequestIdAndStatus(requestId, "PENDING_CONFIRMATION"));
+
+        // Если активных или ожидающих подтверждения записей не осталось, меняем статус запроса на COMPLETED
+        if (remainingActiveOrPending.isEmpty()) {
+            request.setStatus("COMPLETED");
+            // request.setCompletionDate(LocalDateTime.now()); // completionDate удалено
+            System.out.println("Updated request status to COMPLETED");
+        }
+
+        // Удаляем сброс activeHelper и возврат статуса запроса в ACTIVE (теперь статус COMPLETED)
+        // request.setActiveHelper(null); // Удалено
+        // request.setStatus("ACTIVE"); // Удалено
+
+        Request savedRequest = requestRepository.save(request); // Сохраняем изменения в запросе (статус и helpers)
+
+        // Удаляем уведомление о завершении помощи после подтверждения
+        notificationService.deleteNotificationForRequestAndType(requestId, "HELP_COMPLETION");
+        System.out.println("Deleted help completion notification for request: " + requestId);
 
         return savedRequest;
     }
 
-    @Scheduled(fixedRate = 300000) // Проверка каждые 5 минут
-    @Transactional
-    public void checkAndCleanupExpiredRequests() {
-        LocalDateTime now = LocalDateTime.now();
-        List<Request> expiredRequests = requestRepository.findExpiredActiveRequests(now);
+    // @Scheduled(fixedRate = 300000) // Проверка каждые 5 минут
+    // @Transactional
+    // public void checkAndCleanupExpiredRequests() {
+    //     LocalDateTime now = LocalDateTime.now();
+    //     List<Request> expiredRequests = requestRepository.findExpiredActiveRequests(now);
 
-        for (Request request : expiredRequests) {
-            request.setIsExpired(true);
-            request.setStatus("CANCELLED");
-            request.setArchived(true);
+    //     for (Request request : expiredRequests) {
+    //         request.setIsExpired(true);
+    //         request.setStatus("CANCELLED");
+    //         request.setArchived(true);
 
-            // Создаем уведомление для владельца запроса
-            Notification notification = new Notification();
-            notification.setUser(request.getUser());
-            notification.setRequest(request);
-            notification.setMessage("Ваш запрос '" + request.getDescription() + "' был автоматически отменен из-за истечения срока");
-            notification.setType("REQUEST_EXPIRED");
-            notification.setStatus("UNREAD");
-            notification.setCreatedAt(LocalDateTime.now());
-            notification.setActionNeeded(false);
+    //         // Создаем уведомление для владельца запроса
+    //         Notification notification = new Notification();
+    //         notification.setUser(request.getUser());
+    //         notification.setRequest(request);
+    //         notification.setMessage("Ваш запрос '" + request.getDescription() + "' был автоматически отменен из-за истечения срока");
+    //         notification.setType("REQUEST_EXPIRED");
+    //         notification.setStatus("UNREAD");
+    //         notification.setCreatedAt(LocalDateTime.now());
+    //         notification.setActionNeeded(false);
 
 
-            notificationRepository.save(notification);
-        }
+    //         notificationRepository.save(notification);
+    //     }
 
-        requestRepository.saveAll(expiredRequests);
-    }
+    //     requestRepository.saveAll(expiredRequests);
+    // }
 
     @Transactional
     public void rejectHelpCompletion(Long requestId, Long userId) {
@@ -411,19 +437,32 @@ public class RequestService {
             throw new RuntimeException("Only the request creator can reject help completion");
         }
 
-        // Находим активную запись в help_history
+        // Находим записи в help_history со статусом PENDING_CONFIRMATION для этого запроса
         List<HelpHistory> pendingHelps = helpHistoryRepository.findByRequestIdAndStatus(requestId, "PENDING_CONFIRMATION");
-        HelpHistory helpHistory = pendingHelps.stream()
-                .findFirst()
-                .orElseThrow(() -> new RuntimeException("No pending help confirmation found"));
 
-        // Обновляем статус в help_history на CANCELLED
-        helpHistory.setStatus("CANCELLED");
-        helpHistoryRepository.save(helpHistory);
+        // Обновляем статус каждой такой записи в help_history на CANCELLED
+        for (HelpHistory helpHistory : pendingHelps) {
+            helpHistory.setStatus("CANCELLED");
+            helpHistory.setEndDate(LocalDateTime.now()); // Устанавливаем дату завершения отмены
+            helpHistoryRepository.save(helpHistory);
+        }
 
-        // Сбрасываем активного помощника и возвращаем запрос в статус ACTIVE
-        request.setActiveHelper(null);
-        request.setStatus("ACTIVE");
-        requestRepository.save(request);
+        // Проверяем, есть ли еще активные (IN_PROGRESS) записи в help_history для этого запроса
+        List<HelpHistory> remainingActive = helpHistoryRepository.findByRequestIdAndStatus(requestId, "IN_PROGRESS");
+
+        // Если активных помощников не осталось, возвращаем статус запроса на ACTIVE
+        if (remainingActive.isEmpty()) {
+            request.setStatus("ACTIVE");
+        }
+
+        // Удаляем сброс activeHelper и возврат статуса запроса в ACTIVE (теперь статус зависит от remainingActive)
+        // request.setActiveHelper(null); // Удалено
+        // request.setStatus("ACTIVE"); // Удалено
+
+        requestRepository.save(request); // Сохраняем изменения в запросе (статус)
+
+        // Удаляем уведомление о завершении помощи после отклонения
+        notificationService.deleteNotificationForRequestAndType(requestId, "HELP_COMPLETION");
     }
 }
+

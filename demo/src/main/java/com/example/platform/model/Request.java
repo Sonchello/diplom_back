@@ -50,20 +50,6 @@ public class Request {
     @Column(name = "deadline_date", nullable = false)
     private LocalDateTime deadlineDate;
 
-    @Column(name = "is_expired")
-    private Boolean isExpired;
-
-    @PrePersist
-    @PreUpdate
-    private void validateDeadlineDate() {
-        if (deadlineDate == null) {
-            throw new IllegalArgumentException("Deadline date is required");
-        }
-        if (deadlineDate.isBefore(LocalDateTime.now())) {
-            throw new IllegalArgumentException("Deadline date cannot be in the past");
-        }
-    }
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     @JsonIgnoreProperties({"createdRequests", "helpedRequests", "password"})
@@ -71,12 +57,6 @@ public class Request {
 
     @Column(name = "creation_date")
     private LocalDateTime creationDate;
-
-    @Column(name = "help_start_date")
-    private LocalDateTime helpStartDate;
-
-    @Column(name = "completion_date")
-    private LocalDateTime completionDate;
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
@@ -89,11 +69,6 @@ public class Request {
 
     @Column(name = "is_archived")
     private boolean isArchived = false;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "active_helper_id")
-    @JsonIgnoreProperties({"createdRequests", "helpedRequests", "password"})
-    private User activeHelper;
 
     @OneToMany(mappedBy = "request", fetch = FetchType.LAZY)
     @JsonIgnoreProperties({"request"})
@@ -156,14 +131,6 @@ public class Request {
         this.deadlineDate = deadlineDate;
     }
 
-    public Boolean getIsExpired() {
-        return isExpired;
-    }
-
-    public void setIsExpired(Boolean isExpired) {
-        this.isExpired = isExpired;
-    }
-
     public User getUser() {
         return user;
     }
@@ -178,22 +145,6 @@ public class Request {
 
     public void setCreationDate(LocalDateTime creationDate) {
         this.creationDate = creationDate;
-    }
-
-    public LocalDateTime getHelpStartDate() {
-        return helpStartDate;
-    }
-
-    public void setHelpStartDate(LocalDateTime helpStartDate) {
-        this.helpStartDate = helpStartDate;
-    }
-
-    public LocalDateTime getCompletionDate() {
-        return completionDate;
-    }
-
-    public void setCompletionDate(LocalDateTime completionDate) {
-        this.completionDate = completionDate;
     }
 
     public List<User> getHelpers() {
@@ -214,14 +165,6 @@ public class Request {
 
     public void setArchived(boolean archived) {
         isArchived = archived;
-    }
-
-    public User getActiveHelper() {
-        return activeHelper;
-    }
-
-    public void setActiveHelper(User activeHelper) {
-        this.activeHelper = activeHelper;
     }
 
     public List<HelpHistory> getHelpHistory() {

@@ -95,7 +95,7 @@ public class RequestController {
             @PathVariable Long requestId,
             @RequestParam Long userId) {
         try {
-            // Проверяем, существует ли запрос
+            // Проверяем, существует ли запрос (используем findById, который теперь фильтрует неархивированные)
             Request request = requestService.getRequestById(requestId);
             if (request == null) {
                 return ResponseEntity
@@ -116,17 +116,18 @@ public class RequestController {
                         ));
             }
 
-            requestService.deleteRequest(requestId, userId);
+            // Вызываем метод архивации вместо удаления
+            requestService.archiveRequest(requestId, userId);
             return ResponseEntity.ok(Map.of(
                     "success", true,
-                    "message", "Request deleted successfully"
+                    "message", "Request archived successfully"
             ));
         } catch (Exception e) {
             return ResponseEntity
                     .status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of(
                             "success", false,
-                            "message", "Error deleting request: " + e.getMessage()
+                            "message", "Error archiving request: " + e.getMessage()
                     ));
         }
     }
@@ -208,14 +209,11 @@ public class RequestController {
                 ));
             }
 
-            // Если указаны координаты, но не указано максимальное расстояние,
-            // устанавливаем значение по умолчанию (1000 метров)
+
             if (userLat != null && userLon != null && maxDistance == null) {
                 maxDistance = 1000.0;
             }
 
-            // Если указано максимальное расстояние, но не указаны координаты,
-            // игнорируем параметр maxDistance
             if (maxDistance != null && (userLat == null || userLon == null)) {
                 maxDistance = null;
             }

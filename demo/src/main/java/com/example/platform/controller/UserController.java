@@ -75,9 +75,24 @@ public class UserController {
             }
 
             if (birthDate != null && !birthDate.isEmpty()) {
-                user.setBirthDate(LocalDate.parse(birthDate));
-            }
+                LocalDate parsedDate = LocalDate.parse(birthDate);
+                LocalDate today = LocalDate.now();
 
+                // Проверка на будущую дату
+                if (parsedDate.isAfter(today)) {
+                    return ResponseEntity.badRequest()
+                            .body("Дата рождения не может быть в будущем");
+                }
+
+                // Проверка возраста (от 18 до 100 лет)
+                int age = today.getYear() - parsedDate.getYear();
+                if (age < 18 || age > 100) {
+                    return ResponseEntity.badRequest()
+                            .body("Возраст должен быть от 18 до 100 лет");
+                }
+
+                user.setBirthDate(parsedDate);
+            }
             if (avatar != null && !avatar.isEmpty()) {
                 String fileName = UUID.randomUUID().toString() +
                         getFileExtension(avatar.getOriginalFilename());
